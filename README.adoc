@@ -1,0 +1,68 @@
+---
+= Auto-Bank
+:toc: left
+:icons: font
+:toclevels: 4
+:imagesdir: adoc_images
+:source-highlighter: rouge
+:source-linenums-option: true
+
+== PURPOSE
+[.text-center]
+*_Create single yaml bank file from a directory with one or more sf2 files._*
+
+This is in beta and is currently a work in progress.
+
+== How to Use
+. Make sure the setup steps are complete
+. Create a directory named what you want the bank file to be called (ex. "my_bank")
+. Place one or more SF2 files in that directory
+. Open terminal inside the new directory
+. Type command **bun -b run auto_bank_bun.js**
+. You should see an output file called `my_bank.yaml` (name after your directory)
+. Test it with fluidsynth or your favorite hardware synth
+. If it's affordable for you, consider a donation if I saved you time :) Here's to the music!
+
+== Donations
+
+TODO setup ways to donate - cash.app, buymeacoffee.com
+
+TODO if there's interest, consider moving this project to a drag and drop web app.
+
+== Setup Steps
+*Note:* This project depends on both Bun (for JavaScript) and Python 3 (for `.sf2` parsing).
+
+. Install https://bun.sh[**Bun**] if you haven’t already
+. Install Python 3
+. Install the Python library **sf2utils** (used for parsing SF2 files). If your goal is “install once and just have it work anywhere,” then a global or user-level install is fine:
++
+----
+pip install --user sf2utils
+----
+
+. Optionally, ensure your environment is set up so `python3 parse_sf2.py --file yourFont.sf2` can run properly
+
+== LEGAL NOTES
+
+=== License
+
+This project is provided under the link:https://spdx.org/licenses/BSD-3-Clause[BSD-3-Clause License].
+
+Under this license:
+- You can freely use, copy, modify, and distribute the software (including in commercial products).
+- You must keep the copyright notice and license text.
+- You cannot use the original author's names or contributors' names for endorsement or advertising without permission.
+- The software is provided “as is,” without warranty of any kind.
+
+For more info, see https://opensource.org/licenses/BSD-3-Clause[the full text of the BSD-3-Clause license].
+
+**We're Using GitHub Under Protest**
+For our organization, we only use GitHub for private repositories.  We do not recommend it for public or open source work.
+
+We urge you to read about the https://sfconservancy.org/GiveUpGitHub/[Give up GitHub campaign] from https://sfconservancy.org[the Software Freedom Conservancy] to understand
+some reasons why GitHub is not a good place to host FOSS projects.
+
+We are considering https://about.gitlab.com[GitLab] for any open source work we might do in the future.
+
+image::give_up_git_hub.png[caption="Figure 1: ", title="Logo of the GiveUpGitHub campaign", alt="GitHub character holding bag of money and crushing the words 'user rights'", width="300", height="200", link="http://www.flickr.com/photos/javh/5448336655"]
+
