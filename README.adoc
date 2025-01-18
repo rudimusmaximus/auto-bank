@@ -39,8 +39,9 @@ TODO if there's interest, consider moving this project to a drag and drop web ap
 ----
 pip install --user sf2utils
 ----
-
-. Optionally, ensure your environment is set up so `python3 parse_sf2.py --file yourFont.sf2` can run properly
+Note: this is the version on gitlab https://gitlab.com/zeograd/sf2utils
+Confirm this with `pip show sf2utils` command.
+. Optionally, ensure your environment is set up so `python3 parse_sf2.py --file yourFont.sf2` runs properly or simply continue with the how-to-use instructions above.
 
 == LEGAL NOTES
 
