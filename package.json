@@ -1,6 +1,6 @@
 {
   "name": "auto-bank",
-  "version": "0.1.1",
+  "version": "0.1.1-initial-code.3",
   "description": "Create single yaml bank file from a directory of one or more sf2 files.",
   "main": "auto_bank_bun.js",
   "scripts": {
