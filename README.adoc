@@ -43,6 +43,250 @@ Note: this is the version on gitlab https://gitlab.com/zeograd/sf2utils
 Confirm this with `pip show sf2utils` command.
 . Optionally, ensure your environment is set up so `python3 parse_sf2.py --file yourFont.sf2` runs properly or simply continue with the how-to-use instructions above.
 
+= Fluidpatcher SF2 Integration Notes
+:source-note: ChatGPT on 2025-01-22
+
+This document provides an overview of how Fluidpatcher consumes `.sf2` (SoundFont) files and what data is needed in a Fluidpatcher bank file. It includes guidance on which SF2 metadata is relevant, how to structure your `patches:` in YAML, and how to merge these automatically generated presets with a “base” YAML that contains global settings or template data.
+
+== Overview
+
+1. Fluidpatcher only cares about certain information from each `.sf2`:
+   - **Soundfont path** (or filename)
+   - **Bank number**
+   - **Preset (program) number**
+
+2. All other SF2 details (e.g., velocity layers, sample regions, loop points) are **internal** to fluidsynth. Fluidpatcher does not require them.
+
+3. The YAML structure under `patches:` is mostly up to the user. Each patch can have multiple channel assignments, advanced router rules, messages, etc. The minimum is something like:
+
+----
+patches:
+  PatchName:
+    1: SomeSoundFont.sf2:000:000
+----
+
+4. The keys you use for grouping (like `PatchName`) do not need to exactly match the SF2’s preset name. You can rename or reorganize them as you see fit.
+
+== Valid Nodes in Fluidpatcher
+
+- **Top-level keys** recognized by Fluidpatcher include:
+  - `patches:` (required if you want any playable patches)
+  - `router_rules:`
+  - `fluidsettings:` (only `synth.*` keys have an effect)
+  - `init:` (which may contain `fluidsettings:` and `messages:`)
+  - Additional fields like `description:`, `about bank vs patch level:`, etc., can be added for clarity or documentation.
+
+- **Per-patch keys** can include:
+  - `router_rules:`
+  - `messages:`
+  - `ladspafx:`
+  - `sequencers:`
+  - `arpeggiators:`
+  - `midiplayers:`
+  - or any other free-form keys like `info:`, `comment:`, etc.
+
+Consult the Fluidpatcher wiki for full details on each feature: https://github.com/albedozero/fluidpatcher/wiki
+
+== Recommendation
+
+- Generate only the minimal needed info from the `.sf2`: `(filename):(bank):(preset)`.
+- Use the SF2’s preset name or a custom label as the key under `patches:`.
+- Add Fluidpatcher-specific nodes (like `router_rules`) only if needed.
+- Store your global or template data (for example, `init:`, `fluidsettings:`, master `router_rules:`) in a separate “base” YAML and merge your `.sf2`-generated patches into it.
+
+If at a later time you find additional SF2 metadata to be relevant, you can enhance the parsing script. Typically, for Fluidpatcher usage, SF2 “bank + preset + optional name” is sufficient.
+
+--
+source note: {source-note}
+
+
+== Final Solution Based on This Discussion
+
+Below are example files illustrating one possible setup. You can adjust paths and filenames as needed.
+
+=== 1. `parse_sf2.py`
+
+----
+#!/usr/bin/env python3
+import argparse
+import json
+import sys
+from sf2utils.sf2parse import Sf2File
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--file", required=True, help="Path to the .sf2 file")
+    args = parser.parse_args()
+
+    sf2_path = args.file
+    try:
+        with open(sf2_path, 'rb') as sf2_file:
+            sf2 = Sf2File(sf2_file)
+
+            presets_info = []
+            for p in sf2.presets:
+                if hasattr(p, 'preset') and hasattr(p, 'bank'):
+                    presets_info.append({
+                        "name": p.name,
+                        "preset": p.preset,
+                        "bank": p.bank,
+                    })
+            print(json.dumps(presets_info))
+
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+----
+
+This Python script reads a `.sf2` file, extracts each preset’s name, bank, and preset number, and prints them as JSON. It is used by the Bun script to gather data for the final YAML.
+
+=== 2. `base_bank.yaml`
+
+(This file contains your global or “template” data, including example patches and top-level settings. You can customize or remove any keys you do not need.)
+
+----
+description: This is an example base bank for Fluidpatcher
+note: "Add disclaimers or helpful text here"
+patches:
+  Example Patch:
+    info: This is a manually defined patch to demonstrate merging
+    1: Example.sf2:000:000
+
+fluidsettings:
+  synth.reverb.width: 0.5
+
+router_rules:
+- {type: cc, chan: 1=2-16, par1: 7}
+- {type: pbend, chan: 1=3}
+
+init:
+  fluidsettings:
+    synth.reverb.room-size: 0.8
+  messages:
+  - cc:3:11:50
+  - cc:4:11:50
+----
+
+=== 3. `auto_bank_bun.js`
+
+----
+#!/usr/bin/env bun
+
+import fs from "fs";
+import path from "path";
+import yaml from "js-yaml";
+import { $ } from "bun";
+
+// 1) parseSf2File function to call Python parser
+async function parseSf2File(sf2FilePath) {
+  const { stdout, stderr, exitCode } = await $`python3 parse_sf2.py --file ${sf2FilePath}`;
+  if (exitCode !== 0) {
+    throw new Error(stderr.trim() || \`Failed to parse \${sf2FilePath}\`);
+  }
+  return JSON.parse(stdout);
+}
+
+// 2) Main function
+async function generateBankFile() {
+  const dirName = path.basename(process.cwd());
+
+  // Load the base YAML template
+  const baseYaml = fs.readFileSync("base_bank.yaml", "utf8");
+  let finalData = yaml.load(baseYaml);
+
+  // Ensure patches key exists
+  if (!finalData.patches) {
+    finalData.patches = {};
+  }
+
+  // Find all SF2 files
+  const sf2Files = fs
+    .readdirSync(".")
+    .filter((f) => f.toLowerCase().endsWith(".sf2"));
+
+  if (!sf2Files.length) {
+    throw new Error("No SF2 files found in the directory.");
+  }
+
+  const logEntries = [];
+
+  // For each SF2, parse and add presets
+  for (const sf2File of sf2Files) {
+    try {
+      const presets = await parseSf2File(sf2File);
+      if (!presets || presets.length === 0) {
+        logEntries.push(\`Skipped \${sf2File}: No presets found.\`);
+        continue;
+      }
+
+      const patchIndexCounts = {};
+      for (const preset of presets) {
+        const presetName = preset.name || "Unnamed";
+        const presetNum = preset.preset;
+        const bankNum = preset.bank;
+
+        if (!finalData.patches[presetName]) {
+          finalData.patches[presetName] = {};
+          patchIndexCounts[presetName] = 1;
+        }
+
+        const leftKey = String(patchIndexCounts[presetName]++);
+        const presetStr = String(presetNum).padStart(3, '0');
+        const bankStr = String(bankNum).padStart(3, '0');
+        const rightVal = \`\${sf2File}:\${presetStr}:\${bankStr}\`;
+
+        finalData.patches[presetName][leftKey] = rightVal;
+      }
+
+      logEntries.push(\`Processed \${sf2File}\`);
+    } catch (err) {
+      logEntries.push(\`Skipped \${sf2File}: \${err.message}\`);
+    }
+  }
+
+  // Write final YAML
+  const outYamlName = \`\${dirName}.yaml\`;
+  const yamlStr = yaml.dump(finalData, { indent: 2 });
+  fs.writeFileSync(outYamlName, yamlStr, "utf8");
+
+  // Write log file
+  fs.writeFileSync("auto_bank_run_log.txt", logEntries.join("\n"), "utf8");
+
+  console.log(\`Done! Wrote \${outYamlName} and auto_bank_run_log.txt\`);
+}
+
+// 3) Execute
+generateBankFile().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+----
+
+== How to Use
+
+1. Place `parse_sf2.py`, `base_bank.yaml`, and `auto_bank_bun.js` in the same directory.
+2. Add your `.sf2` files to the directory.
+3. Run:
+
+----
+bun run auto_bank_bun.js
+----
+
+4. The script will:
+   - Load `base_bank.yaml` as the foundation.
+   - Detect `.sf2` files in the current directory.
+   - Call `parse_sf2.py` to extract presets from each `.sf2`.
+   - Merge them into the `patches:` section of the base YAML.
+   - Write out `<currentDirName>.yaml` and `auto_bank_run_log.txt`.
+
+That’s it! You now have a valid Fluidpatcher bank file with your base configuration **and** any automatically generated `.sf2` patches.
+
+--
+source note: {source-note}
+
 == LEGAL NOTES
 
 === License
